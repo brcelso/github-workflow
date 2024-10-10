@@ -35,31 +35,21 @@ jobs:
         PR_URL=$(gh pr list --base main --head develop --json url --jq '.[0].url')
         if [ -n "$PR_URL" ]; then
           echo "Pull request already exists: $PR_URL"
-          echo "::set-output name=pr_exists::true"
+          echo "pr_exists=true" >> $GITHUB_ENV  # Set environment variable to true
         else
           echo "No existing pull request found."
-          echo "::set-output name=pr_exists::false"
+          echo "pr_exists=false" >> $GITHUB_ENV  # Set environment variable to false
         fi
       env:
         GH_TOKEN: ${{ secrets.secrets_PAT }}  # Use personal access token (PAT)
 
     - name: Create Pull Request
-      if: steps.check_pr.outputs.pr_exists == 'false'  # Only run if no existing PR is found
+      if: env.pr_exists == 'false'  # Only run if no existing PR is found
       run: |
         gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso
       env:
         GH_TOKEN: ${{ secrets.secrets_PAT }}  # Use personal access token (PAT)
 
-    - name: Configure Git
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
+ 
 
-    - name: Merge changes from main into develop
-      if: steps.check_pr.outputs.pr_exists == 'false'  # Only run if no existing PR is found
-      run: |
-        git checkout develop
-        git merge origin/main --allow-unrelated-histories  # Allow merging unrelated histories
-        git push origin develop
-      env:
-        GH_TOKEN: ${{ secrets.secrets_PAT }}  # Use personal access token (PAT)
+  
