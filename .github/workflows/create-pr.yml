@@ -10,26 +10,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository using the latest stable version
+      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Install GitHub CLI using official action
+      # Step 2: Install GitHub CLI
       - name: Install GitHub CLI
-        uses: actions/setup-gh@v2
-        with:
-          version: latest
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo apt-get update
+          sudo apt-get install gh -y
 
-      # Step 3: Authenticate GitHub CLI with Personal Access Token (secrets_PAT)
+      # Step 3: Authenticate with Personal Access Token (secrets_PAT)
       - name: Authenticate GitHub CLI with secrets_PAT
-        run: echo "${{ secrets.secrets_PAT }}" | gh auth login --with-token
+        run: |
+          echo "${{ secrets.secrets_PAT }}" | gh auth login --with-token
 
       # Step 4: Check if there are new commits between main and develop
       - name: Check for new commits
         id: check-commits
         run: |
           git fetch origin main
-          if [ "$(git rev-list --count origin/develop ^origin/main)" -eq 0 ]; then
+          if [ "$(git rev-list --count develop ^origin/main)" -eq 0 ]; then
             echo "No new commits between develop and main"
             echo "no_updates=true" >> $GITHUB_ENV
           else
@@ -37,13 +39,13 @@ jobs:
             echo "no_updates=false" >> $GITHUB_ENV
           fi
 
-      # Step 5: Conditionally create a pull request if there are updates
+      # Step 5: Create Pull Request only if there are updates
       - name: Create Pull Request
         if: env.no_updates == 'false'
         run: |
           gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso
 
-      # Step 6: Output result of the workflow
+      # Step 6: Output Success or No Update Message
       - name: Output Result
         run: |
           if [ "${{ env.no_updates }}" == "true" ]; then
