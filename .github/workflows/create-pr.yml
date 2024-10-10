@@ -40,7 +40,7 @@ jobs:
       if: success()  # Only run if the PR was created successfully
       run: |
         git checkout develop
-        git merge origin/main
+        git merge origin/main --allow-unrelated-histories  # Allow merging unrelated histories
         git push origin develop
       env:
         GH_TOKEN: ${{ secrets.secrets_PAT }}  # Use personal access token (PAT)
