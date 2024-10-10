@@ -50,6 +50,11 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.secrets_PAT }}  # Use personal access token (PAT)
 
+    - name: Configure Git
+      run: |
+        git config --global user.name "Celso"
+        git config --global user.email "celso.sjunior@outlook.com"
+
     - name: Merge changes from main into develop
       if: success() && steps.check_pr.outputs.pr_exists == 'false'  # Only run if the PR was created successfully
       run: |
