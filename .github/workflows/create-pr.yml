@@ -35,7 +35,7 @@ jobs:
       # Step 5: Create Pull Request (if it doesn't exist)
       - name: Create Pull Request
         run: |
-          gh pr create --base main --head develop --title "First PR" --body "Manual Test" --assignee brcelso
+          gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso
 
       # Step 6: Output Success Message
       - name: Success Message
