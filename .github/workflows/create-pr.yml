@@ -22,4 +22,4 @@ jobs:
       run: |
         gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso
       env:
-        GITHUB_TOKEN: ${{ secrets.PAT }}  # Use personal access token (PAT)
+        GH_TOKEN: ${{ secrets.PAT }}  # Use personal access token (PAT)
