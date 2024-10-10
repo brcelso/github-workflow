@@ -1,17 +1,25 @@
 name: Create PR
+
 on:
   push:
     branches:
       - develop  # Trigger workflow on push to develop branch
+
 permissions:
   pull-requests: write
+  contents: write  # Needed for accessing repository content
+
 jobs:
   build:
-    name: Post welcome comment
+    name: Create Pull Request
     runs-on: ubuntu-latest
+
     steps:
-     - run: gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso
-       env:
-          GITHUB_TOKEN: ${{ secrets.secrets_PAT }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-            
+    - name: Checkout repository
+      uses: actions/checkout@v4  # Checkout the code before creating the PR
+      
+    - name: Create Pull Request
+      run: |
+        gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT }}  # Use personal access token (PAT)
