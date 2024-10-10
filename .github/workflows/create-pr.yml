@@ -11,40 +11,27 @@ permissions:
 
 jobs:
   build:
-    name: Create Pull Request
+    name: Check and Create Pull Request
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4  # Checkout the code before creating the PR
 
-    - name: Fetch all branches
+    - name: Check for new commits
       run: |
         git fetch origin main
-        git fetch origin develop
-
-    - name: Check if there are changes in develop compared to main
-      id: check_changes
-      run: |
-        if git diff --quiet origin/main..origin/develop; then
-          echo "No changes between develop and main"
-          echo "has_changes=false" >> $GITHUB_ENV
+        NEW_COMMITS=$(git log --oneline origin/main..origin/develop)
+        if [ -z "$NEW_COMMITS" ]; then
+          echo "No new commits between main and develop. Exiting..."
+          exit 0
         else
-          echo "Changes detected in develop"
-          echo "has_changes=true" >> $GITHUB_ENV
-      shell: bash
+          echo "New commits found, proceeding to create PR."
+        fi
 
     - name: Create Pull Request
-      if: env.has_changes == 'true'  # Only create PR if changes are detected
+      if: success()  # Only run if the previous step succeeds (new commits found)
       run: |
         gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso
       env:
         GH_TOKEN: ${{ secrets.secrets_PAT }}  # Use personal access token (PAT)
-
-    - name: Show confirmation message
-      run: |
-        if [ "${{ env.has_changes }}" == "true" ]; then
-          echo "Pull request created: Changes were detected in the develop branch."
-        else
-          echo "No pull request was created: No changes detected between develop and main."
-      shell: bash
