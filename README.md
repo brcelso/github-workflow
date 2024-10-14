@@ -1,4 +1,4 @@
-# GitHub Actions Workflow: Create Pull Request + Discord WebHooks
+# GitHub Actions Workflow: Create Pull Request + Discord WebHooks =D
 
 This repository contains a GitHub Actions workflow created by **brcelso** designed to automate the process of creating a pull request (PR) from the `develop` branch to the `main` branch whenever there are new commits in `develop`. 
 
