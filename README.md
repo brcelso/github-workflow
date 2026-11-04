@@ -1,227 +1,62 @@
-# GitHub Actions Workflow: Pull Request Automation + Discord Notifications + Docker Integration
+# Pull requests from develop, and a Docker image on main
 
-This repository contains a GitHub Actions workflow, created by brcelso, to automate pull request creation between the develop and main branches, and sends notifications via Discord Webhooks. Additionally, the workflow is Docker-integrated, ensuring that the environment setup and dependencies are containerized for consistency and ease of use.
-Key Components
+Pushes to this repository run two GitHub Actions workflows. Together they keep `main` reviewable and publish a container image from the commit that lands there.
 
-    GitHub Actions: Automates the workflow of creating pull requests and running Docker containers.
-    Discord Webhooks: Notifies a Discord channel about the status of the workflow, such as successful pull request creation or any errors.
-    Docker: Ensures a consistent environment for executing steps in the workflow.
+**Create PR** (`.github/workflows/create-pr.yml`) runs on every push to `develop`. It checks out the repository, fetches `main`, and lists commits that are on `origin/develop` and not on `origin/main`. It then looks for a pull request from `develop` into `main`. When none is found, it opens one with the GitHub CLI: title `PR created`, body `Automated Creation`, assignee `brcelso`. Work on `develop` gets a pull request to review before it merges, without opening that pull request by hand.
 
-Workflow Overview
+That commit listing finishes successfully either way, including when `develop` has nothing new relative to `main`. It does not decide whether a pull request is created. The following step does: the workflow creates a pull request only when it finds no existing pull request from `develop` into `main`.
 
-The workflow is triggered by a push event to the develop branch and follows these steps:
+**Release** (`.github/workflows/release.yml`) runs on every push to `main`. It checks out that commit, builds the root `Dockerfile` as `celsosjunior/github-workflow`, logs in to Docker Hub, and pushes the image. A push to `main` — including a merge of the pull request opened above — publishes the image that matches the repository at that commit.
 
-    Checkout Repository:
-        The workflow checks out the code from the develop branch into the GitHub Actions runner environment using the actions/checkout@v2 action.
+## Setup
 
-    Build Docker Environment:
-        Using a Dockerfile in the repository, the workflow builds a Docker container to ensure a consistent environment for running the subsequent steps.
-        This container allows you to define specific dependencies and runtime settings for the code.
+1. Keep branches named `develop` and `main`. Pushes to `develop` start Create PR. Pushes to `main` start Release.
+2. Leave these files in the commit that is pushed. The workflows read them from that commit:
+   - `.github/workflows/create-pr.yml`
+   - `.github/workflows/release.yml`
+   - `Dockerfile`
+   - `package.json` and `package-lock.json` (copied into the image)
+3. Enable GitHub Actions on the repository. Create PR and Release both use `ubuntu-latest`, which provides Docker and the GitHub CLI (`gh`).
+4. Add the secrets in the next section as repository secrets: **Settings → Secrets and variables → Actions**. The workflow files do not set a GitHub Environment.
+5. Store a GitHub personal access token in `secrets_PAT`. Create PR passes that token to the GitHub CLI as `GH_TOKEN` for `gh pr list` and `gh pr create`. The token needs access to this repository and permission to open pull requests assigned to `brcelso`. The job also requests `contents: write` and `pull-requests: write` for the default token. The CLI steps use `secrets_PAT`.
+6. Use a Docker Hub account that can push `celsosjunior/github-workflow`. Release logs in with `DOCKERHUB_USERNAME` and `DOCKER_PASSWORD`, then pushes that name. The build command sets no tag, so Docker uses `latest`.
 
-    Check for New Commits:
-        The workflow compares the develop branch with the main branch to check if there are any new commits in develop that haven't yet been merged into main.
+The image is the root `Dockerfile`: base image `node:14`, working directory `/app`, `npm install` from the package manifests, port `3000`, and command `npm start`. `package.json` provides a `test` script.
 
-    Create Pull Request:
-        If new commits are found, it creates a pull request automatically using the peter-evans/create-pull-request@v3 action, with pre-defined details (such as title, description, and branch info).
+## Required secrets
 
-    Notify via Discord Webhook:
-        After successfully creating a pull request or encountering an error, a notification is sent to a specified Discord channel using a Discord Webhook.
-        The message will include relevant details such as:
-            Pull request link
-            Commits included
-            Status of the workflow (success or failure)
+| Secret | Workflow | Type |
+| --- | --- | --- |
+| `secrets_PAT` | Create PR | GitHub personal access token |
+| `DOCKERHUB_USERNAME` | Release | Docker Hub username |
+| `DOCKER_PASSWORD` | Release | Docker Hub password or access token |
 
-Setting Up the Workflow
+These are names only. Store the values in GitHub Actions secrets.
 
-To set up this GitHub Actions workflow, follow these steps:
+## How to use
 
-    Configure the Discord Webhook:
-        In your Discord server, create a webhook in the desired channel.
-        Copy the webhook URL and store it as a secret in your GitHub repository (DISCORD_WEBHOOK_URL).
+### Open the pull request
 
-    Dockerfile:
-        Ensure you have a Dockerfile in the root of your repository for building the container that the workflow will run in.
-        Example Dockerfile:
+1. Commit on `develop` and push to `origin`.
+2. On GitHub, open **Actions** and select the **Create PR** run for that push.
+3. The job checks out the repository with `actions/checkout@v4`, fetches `origin/main`, and lists commits in `origin/main..origin/develop`.
+4. It runs `gh pr list --base main --head develop --json url`. Output that contains a URL sets `pr_exists=true` and skips creation. Empty output sets `pr_exists=false`.
+5. When `pr_exists` is `false`, it runs `gh pr create --base main --head develop --title "PR created" --body "Automated Creation" --assignee brcelso`.
 
-        Dockerfile
+Review that pull request and merge it when it is ready.
 
-    FROM node:14
-    WORKDIR /app
-    COPY package*.json ./
-    RUN npm install
-    COPY . .
-    CMD ["npm", "run", "start"]
+### Publish the image
 
-GitHub Actions Workflow (YAML):
+1. Push to `main`, usually by merging the pull request.
+2. Open the **Release** run for that push.
+3. The job checks out the commit with `actions/checkout@v4`, runs `docker build . -t celsosjunior/github-workflow`, logs in to Docker Hub, and runs `docker push celsosjunior/github-workflow`.
 
-    Here's an example of the workflow (.github/workflows/pr-workflow.yml):
+Build the same image locally with:
 
-    yaml
+```bash
+docker build -t celsosjunior/github-workflow .
+```
 
-        name: Pull Request Automation with Discord Notifications
+## License
 
-        on:
-          push:
-            branches:
-              - develop
-
-        jobs:
-          create-pr:
-            runs-on: ubuntu-latest
-            steps:
-              - name: Checkout repository
-                uses: actions/checkout@v2
-
-              - name: Build Docker container
-                run: docker build -t my-app .
-
-              - name: Check for new commits
-                run: |
-                  git fetch origin main
-                  git log --oneline origin/main..origin/develop
-
-              - name: Create Pull Request
-                uses: peter-evans/create-pull-request@v3
-                with:
-                  base: main
-                  head: develop
-                  title: "Auto-generated PR: Merge develop into main"
-                  body: "This PR was automatically created by the GitHub Actions workflow."
-
-              - name: Send notification to Discord
-                run: |
-                  curl -H "Content-Type: application/json" \
-                  -d '{"content": "Pull request created successfully: https://github.com/your_repo/pull_request_link"}' \
-                  ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-Secrets
-
-In your GitHub repository, you'll need to configure the following secret:
-
-    DISCORD_WEBHOOK_URL: The URL of your Discord Webhook to send notifications.
-
-Benefits of Using Docker
-
-By utilizing Docker, we ensure that the environment in which the workflow runs is consistent and reproducible, regardless of where it is executed. Docker isolates dependencies and configurations, preventing "works on my machine" issues when running code in different environments.
-Docker Advantages:
-
-    Consistency: Ensure that the workflow always runs in a predictable environment.
-    Portability: Run the same container locally or in any CI/CD pipeline.
-    Isolation: Encapsulate dependencies and configurations inside the container.
-
-Conclusion
-
-This workflow integrates GitHub Actions, Discord Webhooks, and Docker to automate pull request creation, ensure consistent environments, and keep your team informed via Discord. This setup can be easily customized to fit other automation or notification needs for your repository.GitHub Actions Workflow: Pull Request Automation + Discord Notifications + Docker Integration
-
-This repository contains a GitHub Actions workflow, created by brcelso, to automate pull request creation between the develop and main branches, and sends notifications via Discord Webhooks. Additionally, the workflow is Docker-integrated, ensuring that the environment setup and dependencies are containerized for consistency and ease of use.
-Key Components
-
-    GitHub Actions: Automates the workflow of creating pull requests and running Docker containers.
-    Discord Webhooks: Notifies a Discord channel about the status of the workflow, such as successful pull request creation or any errors.
-    Docker: Ensures a consistent environment for executing steps in the workflow.
-
-Workflow Overview
-
-The workflow is triggered by a push event to the develop branch and follows these steps:
-
-    Checkout Repository:
-        The workflow checks out the code from the develop branch into the GitHub Actions runner environment using the actions/checkout@v2 action.
-
-    Build Docker Environment:
-        Using a Dockerfile in the repository, the workflow builds a Docker container to ensure a consistent environment for running the subsequent steps.
-        This container allows you to define specific dependencies and runtime settings for the code.
-
-    Check for New Commits:
-        The workflow compares the develop branch with the main branch to check if there are any new commits in develop that haven't yet been merged into main.
-
-    Create Pull Request:
-        If new commits are found, it creates a pull request automatically using the peter-evans/create-pull-request@v3 action, with pre-defined details (such as title, description, and branch info).
-
-    Notify via Discord Webhook:
-        After successfully creating a pull request or encountering an error, a notification is sent to a specified Discord channel using a Discord Webhook.
-        The message will include relevant details such as:
-            Pull request link
-            Commits included
-            Status of the workflow (success or failure)
-
-Setting Up the Workflow
-
-To set up this GitHub Actions workflow, follow these steps:
-
-    Configure the Discord Webhook:
-        In your Discord server, create a webhook in the desired channel.
-        Copy the webhook URL and store it as a secret in your GitHub repository (DISCORD_WEBHOOK_URL).
-
-    Dockerfile:
-        Ensure you have a Dockerfile in the root of your repository for building the container that the workflow will run in.
-        Example Dockerfile:
-
-        Dockerfile
-
-    FROM node:14
-    WORKDIR /app
-    COPY package*.json ./
-    RUN npm install
-    COPY . .
-    CMD ["npm", "run", "start"]
-
-GitHub Actions Workflow (YAML):
-
-    Here's an example of the workflow (.github/workflows/pr-workflow.yml):
-
-    yaml
-
-        name: Pull Request Automation with Discord Notifications
-
-        on:
-          push:
-            branches:
-              - develop
-
-        jobs:
-          create-pr:
-            runs-on: ubuntu-latest
-            steps:
-              - name: Checkout repository
-                uses: actions/checkout@v2
-
-              - name: Build Docker container
-                run: docker build -t my-app .
-
-              - name: Check for new commits
-                run: |
-                  git fetch origin main
-                  git log --oneline origin/main..origin/develop
-
-              - name: Create Pull Request
-                uses: peter-evans/create-pull-request@v3
-                with:
-                  base: main
-                  head: develop
-                  title: "Auto-generated PR: Merge develop into main"
-                  body: "This PR was automatically created by the GitHub Actions workflow."
-
-              - name: Send notification to Discord
-                run: |
-                  curl -H "Content-Type: application/json" \
-                  -d '{"content": "Pull request created successfully: https://github.com/your_repo/pull_request_link"}' \
-                  ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-Secrets
-
-In your GitHub repository, you'll need to configure the following secret:
-
-    DISCORD_WEBHOOK_URL: The URL of your Discord Webhook to send notifications.
-
-Benefits of Using Docker
-
-By utilizing Docker, we ensure that the environment in which the workflow runs is consistent and reproducible, regardless of where it is executed. Docker isolates dependencies and configurations, preventing "works on my machine" issues when running code in different environments.
-Docker Advantages:
-
-    Consistency: Ensure that the workflow always runs in a predictable environment.
-    Portability: Run the same container locally or in any CI/CD pipeline.
-    Isolation: Encapsulate dependencies and configurations inside the container.
-
-Conclusion
-
-This workflow integrates GitHub Actions, Discord Webhooks, and Docker to automate pull request creation, ensure consistent environments, and keep your team informed via Discord. This setup can be easily customized to fit other automation or notification needs for your repository.
+MIT. Copyright (c) 2024 Celso da Silva Junior. See [LICENSE](LICENSE).
